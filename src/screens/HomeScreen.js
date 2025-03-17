@@ -1,73 +1,96 @@
-import React from 'react';
-import { View, FlatList, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { useSelector, useDispatch } from 'react-redux';
-import { removeDownload } from '../redux/downloadsSlice';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import React, { useState, useEffect } from 'react';
+import { View, FlatList, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useDispatch } from 'react-redux';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import SearchBar from '../components/SearchBar';
+import SearchFilterDialog from '../components/SearchFilterDialog';
+import { setChannel } from '../redux/clipsSlice';
+import Icon from 'react-native-vector-icons/MaterialIcons'
 
-const DownloadsScreen = ({ navigation }) => {
-  const { items, inProgress } = useSelector(state => state.downloads);
+const HomeScreen = ({ navigation }) => {
+  const [recentChannels, setRecentChannels] = useState([]);
+  const [filterDialogVisible, setFilterDialogVisible] = useState(false); // Add this
+  const [searchQuery, setSearchQuery] = useState(''); // Add this
   const dispatch = useDispatch();
 
-  const handlePlayDownload = (item) => {
-    navigation.navigate('ClipPlayer', { 
-      clip: {
-        ...item,
-        video_url: item.localUri
+  useEffect(() => {
+    loadRecentChannels();
+  }, []);
+
+  const loadRecentChannels = async () => {
+    try {
+      const storedChannels = await AsyncStorage.getItem('recentChannels');
+      if (storedChannels) {
+        setRecentChannels(JSON.parse(storedChannels));
       }
-    });
+    } catch (error) {
+      console.error('Failed to load recent channels:', error);
+    }
   };
 
-  const handleDeleteDownload = (id) => {
-    // In a full implementation, you'd also delete the file
-    dispatch(removeDownload(id));
+  // Modified to show filter dialog instead of searching immediately
+  const handleSearch = (channelName) => {
+    setSearchQuery(channelName);
+    setFilterDialogVisible(true);
   };
 
-  if (items.length === 0) {
-    return (
-      <View style={styles.emptyContainer}>
-        <Icon name="download" size={64} color="#555" />
-        <Text style={styles.emptyText}>No downloaded clips</Text>
-        <Text style={styles.emptySubtext}>
-          Downloaded clips will appear here
-        </Text>
-      </View>
-    );
+  // New function that will be called after filter selection
+const handleSearchWithFilters = async (channelName, timeFilter) => {
+  dispatch(setChannel(channelName));
+  
+  // Save to recent channels
+  const updated = [channelName, ...recentChannels.filter(c => c !== channelName)].slice(0, 5);
+  setRecentChannels(updated);
+  
+  try {
+    await AsyncStorage.setItem('recentChannels', JSON.stringify(updated));
+  } catch (error) {
+    console.error('Failed to save recent channel:', error);
   }
+  
+  // Close dialog
+  setFilterDialogVisible(false);
+  
+  // Navigate with the filter parameters (no sortBy)
+  navigation.navigate('ClipsList', { 
+    channelName,
+    timeFilter
+  });
+};
 
   return (
     <View style={styles.container}>
-      <Text style={styles.headerText}>Downloads</Text>
+      <Text style={styles.title}>Kick Clips</Text>
+      <SearchBar onSearch={handleSearch} />
       
-      <FlatList
-        data={items}
-        keyExtractor={item => `download-${item.id}`}
-        renderItem={({ item }) => (
-          <View style={styles.downloadItem}>
-            <Image source={{ uri: item.thumbnailUrl }} style={styles.thumbnail} />
-            
-            <View style={styles.infoContainer}>
-              <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
-              <Text style={styles.channelName}>{item.channelName}</Text>
-            </View>
-            
-            <View style={styles.actionButtons}>
-              <TouchableOpacity 
-                style={styles.actionButton}
-                onPress={() => handlePlayDownload(item)}
-              >
-                <Icon name="play-arrow" size={24} color="#00AAFF" />
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.actionButton}
-                onPress={() => handleDeleteDownload(item.id)}
-              >
-                <Icon name="delete" size={24} color="#FF6B6B" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+      {/* Filter Dialog */}
+      <SearchFilterDialog
+        visible={filterDialogVisible}
+        channelName={searchQuery}
+        onClose={() => setFilterDialogVisible(false)}
+        onApply={handleSearchWithFilters}
       />
+      
+      <Text style={styles.sectionTitle}>Recent Channels</Text>
+      {recentChannels.length > 0 ? (
+        <FlatList
+          data={recentChannels}
+          keyExtractor={(item, index) => `recent-${index}`}
+          renderItem={({ item }) => (
+            <TouchableOpacity 
+              style={styles.channelItem}
+              onPress={() => handleSearch(item)}
+            >
+              <Icon name="history" size={24} color="#888" />
+              <Text style={styles.channelName}>{item}</Text>
+            </TouchableOpacity>
+          )}
+        />
+      ) : (
+        <Text style={styles.emptyText}>
+          No recent channels. Search for a channel to get started.
+        </Text>
+      )}
     </View>
   );
 };
@@ -77,69 +100,42 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#121212',
   },
-  headerText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: 'white',
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  downloadItem: {
-    flexDirection: 'row',
-    backgroundColor: '#1E1E1E',
-    marginHorizontal: 16,
-    marginVertical: 8,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  thumbnail: {
-    width: 100,
-    height: 70,
-    backgroundColor: '#0A0A0A',
-  },
-  infoContainer: {
-    flex: 1,
-    padding: 8,
-    justifyContent: 'center',
-  },
   title: {
-    color: 'white',
-    fontSize: 14,
+    fontSize: 28,
     fontWeight: 'bold',
-  },
-  channelName: {
-    color: '#AAAAAA',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingRight: 8,
-  },
-  actionButton: {
-    padding: 8,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#121212',
-  },
-  emptyText: {
     color: 'white',
+    textAlign: 'center',
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginTop: 16,
+    color: 'white',
+    marginHorizontal: 16,
+    marginTop: 24,
+    marginBottom: 8,
   },
-  emptySubtext: {
+  channelItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E1E1E',
+    marginHorizontal: 16,
+    marginVertical: 4,
+    padding: 16,
+    borderRadius: 8,
+  },
+  channelName: {
+    color: 'white',
+    fontSize: 16,
+    marginLeft: 12,
+  },
+  emptyText: {
     color: '#888',
-    fontSize: 14,
-    marginTop: 8,
     textAlign: 'center',
+    marginTop: 20,
     marginHorizontal: 40,
   },
 });
 
-export default DownloadsScreen;
+export default HomeScreen;
