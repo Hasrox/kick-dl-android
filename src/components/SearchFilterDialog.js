@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React from 'react';
+import { useState } from 'react';
 import { 
   Modal, 
   View, 
@@ -8,11 +9,11 @@ import {
 } from 'react-native';
 
 const SearchFilterDialog = ({ visible, onClose, onApply, channelName }) => {
-  const [sortBy, setSortBy] = useState('date');
   const [timeFilter, setTimeFilter] = useState('all');
   
   const handleApply = () => {
-    onApply(channelName, sortBy, timeFilter);
+    // We're no longer passing sortBy since it's handled client-side
+    onApply(channelName, timeFilter);
   };
 
   return (
@@ -20,22 +21,6 @@ const SearchFilterDialog = ({ visible, onClose, onApply, channelName }) => {
       <View style={styles.modalContainer}>
         <View style={styles.dialogContainer}>
           <Text style={styles.dialogTitle}>Clips from {channelName}</Text>
-          
-          <Text style={styles.sectionTitle}>Sort By</Text>
-          <View style={styles.optionsContainer}>
-            <TouchableOpacity 
-              style={[styles.option, sortBy === 'date' && styles.selectedOption]} 
-              onPress={() => setSortBy('date')}
-            >
-              <Text style={[styles.optionText, sortBy === 'date' && styles.selectedText]}>Most Recent</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.option, sortBy === 'view' && styles.selectedOption]} 
-              onPress={() => setSortBy('view')}
-            >
-              <Text style={[styles.optionText, sortBy === 'view' && styles.selectedText]}>Most Viewed</Text>
-            </TouchableOpacity>
-          </View>
           
           <Text style={styles.sectionTitle}>Time Period</Text>
           <View style={styles.optionsContainer}>
