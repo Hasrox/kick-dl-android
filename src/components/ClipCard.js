@@ -1,7 +1,7 @@
 import React from 'react';
 import { TouchableOpacity, Image, View, Text, StyleSheet } from 'react-native';
 import { formatDuration } from '../utils/formatters.js';
-
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import { format } from 'date-fns';
 
 const ClipCard = ({ clip, onPress, onLongPress, isSelected }) => (
@@ -80,6 +80,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginHorizontal: 8,
     marginBottom: 8,
+  },
+
+  selectedCard: {
+    borderWidth: 2,
+    borderColor: '#00AAFF',
+  },
+  checkmarkOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  metaContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginHorizontal: 8,
+    marginBottom: 8,
+  },
+  date: {
+    color: '#888888',
+    fontSize: 12,
+  },
+  time: {
+    color: '#888888',
+    fontSize: 12,
   },
 });
 
