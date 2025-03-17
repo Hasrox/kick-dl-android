@@ -1,16 +1,27 @@
-import React from 'react';
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   FlatList, 
   Text, 
   StyleSheet, 
   ActivityIndicator, 
-  TouchableOpacity 
+  TouchableOpacity,
+  Alert
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { fetchChannelClips } from '../redux/clipsSlice';
+import { addDownload } from '../redux/downloadsSlice';
 import ClipCard from '../components/ClipCard';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+
+// Simple debounce function to prevent multiple calls
+const debounce = (func, delay) => {
+  let timeoutId;
+  return (...args) => {
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => func(...args), delay);
+  };
+};
 
 const ClipsListScreen = ({ route, navigation }) => {
   const { channelName } = route.params;
@@ -18,24 +29,26 @@ const ClipsListScreen = ({ route, navigation }) => {
   const { items, loading, hasMore, error, cursor } = useSelector(state => state.clips);
   const [selectedClips, setSelectedClips] = useState([]);
   const [selectionMode, setSelectionMode] = useState(false);
-  const [sortOption, setSortOption] = useState('date'); // 'date' or 'views'
+  const totalClips = items.length;
 
   useEffect(() => {
     loadClips();
   }, [channelName]);
 
   const loadClips = () => {
-    const { channelName, sortBy = 'date', timeFilter = 'all' } = route.params;
+    const { channelName, sortBy = 'view', timeFilter = 'all' } = route.params;
     dispatch(fetchChannelClips({ 
       channelName, 
-      cursor: 0,
+      cursor: null, // Start from the beginning
       sortBy,
       timeFilter
     }));
   };
+  
   const loadMoreClips = () => {
     if (!loading && hasMore) {
-      const { channelName, sortBy = 'date', timeFilter = 'all' } = route.params;
+      console.log(`Loading more clips with cursor: ${cursor}`);
+      const { channelName, sortBy = 'view', timeFilter = 'all' } = route.params;
       dispatch(fetchChannelClips({ 
         channelName, 
         cursor,
@@ -45,8 +58,79 @@ const ClipsListScreen = ({ route, navigation }) => {
     }
   };
 
+  const handleLongPress = (clip) => {
+    setSelectionMode(true);
+    setSelectedClips([clip.id]);
+  };
+
   const handleClipPress = (clip) => {
-    navigation.navigate('ClipPlayer', { clip });
+    if (selectionMode) {
+      // Toggle selection
+      setSelectedClips(prev => 
+        prev.includes(clip.id) 
+          ? prev.filter(id => id !== clip.id)
+          : [...prev, clip.id]
+      );
+    } else {
+      // Normal navigation
+      navigation.navigate('ClipPlayer', { clip });
+    }
+  };
+
+  const selectAll = () => {
+    setSelectedClips(items.map(clip => clip.id));
+  };
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedClips([]);
+  };
+
+  const downloadSelected = () => {
+    if (selectedClips.length === 0) {
+      Alert.alert('No Clips Selected', 'Please select at least one clip to download.');
+      return;
+    }
+
+    Alert.alert(
+      'Download Clips',
+      `Do you want to download ${selectedClips.length} selected clip(s)?`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Download',
+          onPress: () => {
+            // Find the selected clips from the items array
+            const clipsToDownload = items.filter(clip => selectedClips.includes(clip.id));
+            
+            // Add each clip to downloads
+            clipsToDownload.forEach(clip => {
+              dispatch(addDownload({
+                id: clip.id,
+                title: clip.title,
+                channelName: clip.channel_name,
+                thumbnailUrl: clip.thumbnail_url,
+                videoUrl: clip.video_url,
+                duration: clip.duration
+              }));
+            });
+            
+            // Show success message
+            Alert.alert(
+              'Download Started',
+              `${selectedClips.length} clip(s) added to downloads.`,
+              [{ text: 'OK' }]
+            );
+            
+            // Exit selection mode
+            exitSelectionMode();
+          }
+        }
+      ]
+    );
   };
 
   if (error) {
@@ -62,75 +146,72 @@ const ClipsListScreen = ({ route, navigation }) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.headerText}>{channelName}'s Clips</Text>
+      {selectionMode ? (
+        <View style={styles.selectionHeader}>
+          <TouchableOpacity style={styles.headerButton} onPress={exitSelectionMode}>
+            <Icon name="close" size={24} color="white" />
+          </TouchableOpacity>
+          
+          <Text style={styles.headerText}>
+            {selectedClips.length} selected
+          </Text>
+          
+          <View style={styles.headerActions}>
+            <TouchableOpacity style={styles.headerButton} onPress={selectAll}>
+              <Icon name="select-all" size={24} color="white" />
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.headerButton} onPress={downloadSelected}>
+              <Icon name="file-download" size={24} color="white" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.headerContainer}>
+          <Text style={styles.headerText}>{channelName}'s Clips</Text>
+          <Text style={styles.clipCountText}>({totalClips} clips)</Text>
+        </View>
+      )}
       
       <FlatList
         data={items}
         keyExtractor={item => `clip-${item.id}`}
         renderItem={({ item }) => (
-          <ClipCard clip={item} onPress={handleClipPress} />
+          <ClipCard 
+            clip={item} 
+            onPress={() => handleClipPress(item)} 
+            onLongPress={() => handleLongPress(item)}
+            isSelected={selectedClips.includes(item.id)}
+          />
         )}
         numColumns={2}
         contentContainerStyle={styles.clipsList}
-        onEndReached={loadMoreClips}
+        onEndReached={debounce(loadMoreClips, 300)}
         onEndReachedThreshold={0.5}
         ListEmptyComponent={
-          loading ? null : (
+          loading && items.length === 0 ? null : (
             <Text style={styles.emptyText}>No clips found</Text>
           )
         }
         ListFooterComponent={
-          loading ? (
-            <ActivityIndicator size="large" color="#00AAFF" style={styles.loader} />
-          ) : null
+          <>
+            {loading && (
+              <ActivityIndicator size="large" color="#00AAFF" style={styles.loader} />
+            )}
+            {!hasMore && items.length > 0 && (
+              <Text style={styles.endText}>No more clips</Text>
+            )}
+          </>
         }
       />
     </View>
   );
 };
 
-
-const [selectedClips, setSelectedClips] = useState([]);
-const [selectionMode, setSelectionMode] = useState(false);
-
-const handleLongPress = (clip) => {
-  setSelectionMode(true);
-  setSelectedClips([clip.id]);
-};
-
-const handleClipPress = (clip) => {
-  if (selectionMode) {
-    // Toggle selection
-    setSelectedClips(prev => 
-      prev.includes(clip.id) 
-        ? prev.filter(id => id !== clip.id)
-        : [...prev, clip.id]
-    );
-  } else {
-    // Normal navigation
-    navigation.navigate('ClipPlayer', { clip });
-  }
-};
-
-const selectAll = () => {
-  setSelectedClips(items.map(clip => clip.id));
-};
-
-const downloadSelected = async () => {
-  // Implementation for batch downloading selected clips
-};
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#121212',
-  },
-  headerText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: 'white',
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 8,
   },
   clipsList: {
     paddingBottom: 20,
@@ -168,6 +249,43 @@ const styles = StyleSheet.create({
   loader: {
     marginVertical: 20,
   },
+  endText: {
+    color: '#888',
+    textAlign: 'center',
+    marginVertical: 20,
+    fontSize: 14,
+  },
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  headerText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  clipCountText: {
+    fontSize: 16,
+    color: '#AAAAAA',
+    marginLeft: 8,
+  },
+  selectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#1E1E1E',
+  },
+  headerButton: {
+    padding: 8,
+  },
+  headerActions: {
+    flexDirection: 'row',
+  }
 });
 
 export default ClipsListScreen;
