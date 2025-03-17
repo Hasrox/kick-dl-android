@@ -1,5 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, FlatList, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import React from 'react';
+import { useState, useEffect } from 'react';
+import { 
+  View, 
+  FlatList, 
+  Text, 
+  StyleSheet, 
+  ActivityIndicator, 
+  TouchableOpacity 
+} from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { fetchChannelClips } from '../redux/clipsSlice';
 import ClipCard from '../components/ClipCard';
@@ -8,6 +16,9 @@ const ClipsListScreen = ({ route, navigation }) => {
   const { channelName } = route.params;
   const dispatch = useDispatch();
   const { items, loading, hasMore, error, cursor } = useSelector(state => state.clips);
+  const [selectedClips, setSelectedClips] = useState([]);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [sortOption, setSortOption] = useState('date'); // 'date' or 'views'
 
   useEffect(() => {
     loadClips();
